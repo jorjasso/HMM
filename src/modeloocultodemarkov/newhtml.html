@@ -1,0 +1,889 @@
+<!--
+To change this template, choose Tools | Templates
+and open the template in the editor.
+-->
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+  <head>
+    <title></title>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+  </head>
+  <body>
+    Ninguna clase esta testeada todavia
+    Pensar en hacerlo lo mas POO posible
+    Me quede en HMM y pensar como segmentar addObservaciones (listo)
+    implementar la idea de trellis (listo)
+
+    martes 23 de marzo
+    -agregar individualmente los gmm a cada estado, configurando el numero de gaussianas que deben tener
+    esto hacerlo directamente del main (listo)
+
+    -modificar addObservaciones para usarlo en segmentar, la idea seria usar cluster, modificar la clase cluster (listo)
+
+    jueves 25 de marzo
+    -por que gmm retorna null en HMM.segmentar (listo)
+
+    domingo 28 de marzo
+    implementados en trellis forward backward y viterbi, sin testear aùn (testeados solo falta testear viterbi)
+
+    lunes 29 de marzo
+    implementar calcularGamma_jm (listo)
+    falta verificar calcularGamma_jm
+
+    Implementar reportes usando tablas
+    http://www.gfc.edu.co/estudiantes/anuario/2003/sistemas/catalina/tercer_p/Tablas/c2.html
+    http://technology-related.com/docs/books/tutorial/uiswing/components/table.html
+
+
+ IMPLEMENTACION DEL HMM
+ /*    public void entrenarHMM(Patron patronesE[])
+    {
+        int i=0;
+        int E=patronesE.length;
+        double sum=0;
+
+        while(i<10)
+        {
+            algoritmoBaumWelch(patronesE);
+            this.mostrar();
+            this.verificar();
+
+            for(int e=0;e<E;e++)
+                sum=sum+algoritmoViterbiII(patronesE[e].datos);
+
+            System.out.println("log P(O/modelo)= "+sum+"     P(O/modelo) = "+Math.exp(sum));
+
+            sum=0;
+            i++;
+
+        }
+    }
+
+    /*algoritmo de viterbi
+     * este procedimiento es el mismo que algoritmode viterbi pero solo sirve
+     * para testear P(O/modelo) y no actualiza las variables del modelo oculto
+     */
+/*    public double algoritmoViterbiII(double [][]y)
+    {
+        int N=S.length-2;       //numero de estados sin contar estado inicial ni final
+        int T=y[0].length;      //numero de frames T
+        int I=0;                //estado inicial
+        int F=S.length-1;       //estado final
+        double [][] estados=Util.ceros(S.length, T+2);
+
+        double[][]yTranspuesta=Util.traspuesta(y);
+
+        for(int i=1;i<=N;i++)
+        {
+            if(grafoHMM[I][i]==1)//si existe una conexion del estado I al estado i
+                estados[i][1]=Util.log(A[I][i])+ S[i].b(yTranspuesta[0]);
+        }
+
+        double []temp=new double[N];//acumulador
+        int cont; //cont para temp
+
+        for(int t=2;t<=T;t++)
+        {
+            for(int j=1;j<=N;j++)
+            {
+                cont=0;
+                for(int i=1;i<=N;i++)
+                {   //     =log( alfa _i(t-1) ) + log (Aij) donde  S[i].alfaLog[t-1]=log( alfa _i(t-1) )
+                    if(grafoHMM[i][j]==1)//si existe una conexion del estado i al estado j
+                    {
+                        if(S[i].alfaViterbiLog[t-1]!=0) //para evitar que un estado en un tiempo t que previamente no tiene valor en el tiempo t-1 se llene con valores erroneos
+                        {
+                            temp[cont]=S[i].alfaViterbiLog[t-1]+Util.log(A[i][j]);
+                            cont++;
+                        }
+                    }
+                }
+              //log( alfa_j(t) ) = log( sum_{i=1...N}(alfa _i(t-1)Aij) ) + log( b_j(y_t) )
+              //  S[j].alfaViterbiLog[t]  = Util.max(temp)    +   S[j].b(yTranspuesta[t-1]);
+
+                if(Util.sumLog(temp)!=0)
+                {
+                    temp=Util.eliminarCeros(temp);
+                    estados[j][t]=Util.max(temp)    +   S[j].b(yTranspuesta[t-1]);
+                    if(Math.exp(estados[j][t])>1)
+                        System.out.println("error en los alfas viterbi");
+                    //System.out.println(" probabilidad"+Math.exp(S[j].alfaLog[t]));
+                    temp=new double[N];//acumulador
+                }
+                temp=Util.resetear(temp);
+
+            }
+        }
+        //TERMINACION
+        //alfa_F(T)  ecu 9.9
+        cont=0;
+        for(int i=1;i<=N;i++)
+        {
+            if(grafoHMM[i][F]==1)//si existe una conexion del estado i al estado F
+            {
+                temp[cont]=S[i].alfaViterbiLog[T]+Util.log(A[i][F]);
+                cont++;
+            }
+        }
+        temp=Util.eliminarCeros(temp);
+        return Util.max(temp);
+    }
+
+    public void resetear()
+    {
+        for(int i=0;i<S.length;i++)
+        {
+            S[i].GammaLog=null;
+            S[i].alfaLog=null;
+            S[i].alfaViterbiLog=null;
+            S[i].betaLog=null;
+            S[i].gamma_jm_Log=null;
+        }
+
+    }
+
+    public void algoritmoBaumWelch(Patron patronesE[])
+    {
+        int N=S.length-2;       //numero de estados sin contar estado inicial ni final
+        int I=0;                //estado inicial
+        int F=S.length-1;       //estado final
+        int E=patronesE.length; //numero de patrones
+        int D=patronesE[0].getD();//dimension del patron
+
+        //para cjm ec 9.44
+        double [][][] cjmNumerador=new double[E][S.length][]; //E*(N+2)*M
+        double [][] cjmDenominador=new double[E][S.length];   //E*(N+2)
+
+        //para ujm ec 9.45
+        double [][][][] ujmNumerador=new double[E][S.length][][]; //E*(N+2)*M*D
+        double [][][] ujmDenominador=new double[E][S.length][];    //E*(N+2)*M
+
+        //para Ejm ec 9.46
+        double [][][][] EjmNumerador=new double[E][S.length][][]; //E*(N+2)*M*D
+        double [][][] EjmDenominador=new double[E][S.length][];    //E*(N+2)*M mismo que ujmDenominador
+        //para aij ec 9.24
+        double [][][] aijNumerador=new double[E][A.length][A[0].length];
+        double [][][] aijDenominador=new double[E][S.length][A[0].length];
+
+        //para la sumatoria t=1:T
+        for(int e=0;e<E;e++)
+        {
+            resetear();
+             algoritmoForward(patronesE[e].datos);
+             algoritmoBackward(patronesE[e].datos);
+             algoritmoViterbi(patronesE[e].datos);
+             getGamma_jm(patronesE[e].datos);
+             getGammaLog(patronesE[e].datos);
+
+
+             //actualizar cjm ec9.44
+             //actualizar ujm ec9.45
+             //actualizar Ejm ec9.46
+             for(int j=1;j<=N;j++)
+             {
+                 int M=S[j].getNroGaussianas();
+                 cjmNumerador[e][j] =new double[M];
+                 ujmNumerador[e][j]=new double[M][D];
+                 ujmDenominador[e][j]=new double[M];
+                 EjmNumerador[e][j]=new double[M][D];
+                 EjmDenominador[e][j]=new double[M];
+                 for(int m=0;m<M;m++)
+                 {
+                     cjmNumerador[e][j][m]=numeradorLogCjm(patronesE[e].getDatos(), j, m);
+                     ujmNumerador[e][j][m]=numeradorLogUjm(patronesE[e].getDatos(), j, m);
+                     ujmDenominador[e][j][m]=denominadorLogUjm(patronesE[e].getDatos(), j, m);
+                     EjmNumerador[e][j][m]=numeradorLogEjm(patronesE[e].getDatos(), j, m);
+                     EjmDenominador[e][j][m]=denominadorLogEjm(patronesE[e].getDatos(), j, m);
+                 }
+                 cjmDenominador[e][j]=denominadorLogCjm(patronesE[e].getDatos(), j);
+             }
+             //fin de actualizar
+
+             //actualizar aij
+             //ec. 9.24 9.25 9.26 numerador y denominador
+             int T=patronesE[e].datos[0].length;
+             for(int i=0;i<S.length;i++)
+             {
+                 for(int j=0;j<S.length;j++)
+                 {
+                     if(this.grafoHMM[i][j]==1)
+                     {
+                         aijNumerador[e][i][j]=actualizarAijNumerador(patronesE[e].getDatos(), i, j);
+     //                    System.out.println("numerador A[i][j] = "+aijNumerador[e][i][j]);
+                         aijDenominador[e][i][j]=actualizarAijDenominador(patronesE[e].getDatos(), i, j);
+       //                  System.out.println("denominador A[i][j] = "+aijDenominador[e][i][j]);
+                     }
+                 }
+             }
+
+        }
+        /*punto de verificacion martes 08 de diciembre*/
+
+        //para la sumatoria e=1:E
+ /*       for(int j=1;j<=N;j++)
+        {
+            int M=S[j].getNroGaussianas();
+            double []tempDenominadorCjm=new double[E];
+            for(int e=0;e<E;e++)
+            {
+                tempDenominadorCjm[e]=cjmDenominador[e][j];
+
+            }
+            for(int m=0;m<M;m++)
+            {
+                //para cjm
+                double []tempNumeradorCjm = new double[E];
+
+
+                double [][]tempNumeradorUjm= new double[E][D];
+                double []tempDenominadorUjm=new double[E];
+
+                double [][]tempNumeradorEjm= new double[E][D];
+                double []tempDenominadorEjm=new double[E];
+
+                for(int e=0;e<E;e++)
+                {
+                    //para cjm
+                    tempNumeradorCjm[e]=cjmNumerador[e][j][m];
+
+                    //para ujm
+                    tempNumeradorUjm[e]=ujmNumerador[e][j][m];
+
+                    tempDenominadorUjm[e]=ujmDenominador[e][j][m];
+                    //para Ejm
+                    tempNumeradorEjm[e]=EjmNumerador[e][j][m];
+                    tempDenominadorEjm[e]=EjmDenominador[e][j][m];
+
+                }
+
+                //para cjm
+
+                S[j].gmm.c[m]=Math.exp( Util.sumLog(tempNumeradorCjm)-Util.sumLog(tempDenominadorCjm));
+                if(S[j].gmm.c[m]>1.0005)
+                    System.out.println("error en c "+S[j].gmm.c[m]);
+                //para ujm
+                double [] numeradorUjm = new double[D];
+                double denominadorUjm=Util.sumLog(tempDenominadorUjm);
+                tempNumeradorUjm=Util.traspuesta(tempNumeradorUjm);
+                for(int d=0;d<D;d++)
+                    numeradorUjm[d]=Util.sumLog(tempNumeradorUjm[d]);
+
+                double []mediaLog=Util.restar(numeradorUjm, denominadorUjm);
+                S[j].gmm.N[m].setU(Util.exp(mediaLog));
+
+                //para Ejm
+                double [] numeradorEjm = new double[D];
+                double denominadorEjm=Util.sumLog(tempDenominadorEjm);
+                tempNumeradorEjm=Util.traspuesta(tempNumeradorEjm);
+                for(int d=0;d<D;d++)
+                    numeradorEjm[d]=Util.sumLog(tempNumeradorEjm[d]);
+
+                double []covariazaLog=Util.restar(numeradorEjm, denominadorEjm);
+                S[j].gmm.N[m].setE(covariazaLog);
+
+                /*resetear valore temporales*/
+/*                Util.resetear(tempNumeradorCjm);
+                Util.resetear(tempNumeradorUjm);
+                Util.resetear(tempDenominadorUjm);
+                Util.resetear(tempNumeradorEjm);
+                Util.resetear(tempDenominadorEjm);
+            }
+            Util.resetear(tempDenominadorCjm);
+        }
+
+        double []tempNumeradorAij=new double[E];
+        double []tempDenominadorAij=new double[E];
+        //para aij
+
+        /*punto de verificacion sabado 26 de diciembre*/
+        //para el denominador
+
+ /*       for(int i=0;i<S.length;i++)
+        {
+            for(int j=0;j<S.length;j++)
+            {
+                if(this.grafoHMM[i][j]==1)
+                {
+                    for(int e=0;e<E;e++)
+                    {
+                        tempNumeradorAij[e]=aijNumerador[e][i][j];
+                        tempDenominadorAij[e]=aijDenominador[e][i][j];
+                    }
+                    if(i==I)
+                    {
+                        A[i][j]=Math.exp(Util.sumLog(tempNumeradorAij)-Util.log(E));
+                        if(A[i][j]>1.005)
+                        {
+                            System.out.println("error 1");
+                            System.out.println("valores "+Util.sumLog(tempNumeradorAij)+" "+Util.log(E)+" prob "+A[i][j]);
+                        }
+                        //para evitar mucho error numérico
+                        if(A[i][j]>=0.99999999&&A[i][j]<=1.0000000009)
+                            A[i][j]=1;
+
+                        Util.resetear(tempNumeradorAij);
+                    }
+                    else
+                    {
+                        A[i][j]=Math.exp(Util.sumLog(tempNumeradorAij)-Util.sumLog(tempDenominadorAij));
+                        if(A[i][j]>1.005)
+                        {
+                            System.out.println("error 2");
+                            System.out.println("valores "+Util.sumLog(tempNumeradorAij)+" "+Util.sumLog(tempDenominadorAij)+" prob "+A[i][j]);
+                        }
+                    }
+                    //resetear vectores temporales
+                    Util.resetear(tempNumeradorAij);
+                    Util.resetear(tempDenominadorAij);
+                }
+            }
+        }
+    }
+
+    /* computa todas los logaritmos de las probabilidades alfa_t(i), para cada uno de los estados
+     */
+
+
+
+     //implementacion de ec 9.44 (no usar)
+     //para actualizar cjm, entra como argumento, los patrones, el estado Sj, y la mixtura m
+     public double actualizarCij(Patron patronesE[], int j, int m)
+     {
+         int E=patronesE.length; //numero de patrones de entrenamiento
+         int N=S.length-2;       //numero de estados sin contar estado inicial ni final
+         int I=0;                //estado inicial
+         int F=S.length-1;       //estado final
+
+         int T;      //numero de frames T
+         double []temENumerador =new double[E];// los vectores temporales temT* y temE* sirven para acumular los logProb y luego sumarlos
+         double []temEDenominador =new double[E];
+         for(int e=0;e<E;e++)    //para todos los patrones de entrenamiento
+         {
+             /*para el numeradorCjm*/
+/*             T=patronesE[e].getT();  //cada patron tiene tamaño diferente
+             double []temT=new double[T];
+
+
+             for(int t=2;t<=T;t++)
+                 temT[t]=S[j].gamma_jm_Log[m][t];
+
+             temENumerador[e]=Util.sumLog(temT);
+
+             //resetear el vector
+             temT=Util.resetear(temT);
+             /*para el denominadorCjm*/
+ /*            for(int t=2;t<=T;t++)
+                 temT[t]=S[j].GammaLog[t];
+
+             temEDenominador[e]=Util.sumLog(temT);
+         }
+         return Util.sumLog(temENumerador)-Util.sumLog(temEDenominador);
+     }
+
+/****************************************************************/
+     //implementacion de ec 9.44
+     //para actualizar cjm, entra como argumento, el vector de observaciones Y, el estado Sj, y la mixtura m
+     //solo actualiza para la sumatoria t=1:T, no tiene en cuenta e=1:E
+     //solo actualiza el numeradorCjm de la formula
+/*     public double numeradorLogCjm(double [][] y, int j, int m)
+     {
+         int I=0;                //estado inicial
+         int F=S.length-1;       //estado final
+
+         int T=y[0].length;      //numero de frames T
+         /*para el numeradorCjm*/
+/*         double []temT=new double[T];
+
+         for(int t=1;t<=T;t++)
+             temT[t-1]=S[j].gamma_jm_Log[m][t];
+
+         return Util.sumLog(temT);
+
+     }
+
+     /*para el denominadorCjm*/
+
+/*     public double denominadorLogCjm(double [][] y, int j)
+     {
+         int N=S.length-2;       //numero de estados sin contar estado inicial ni final
+         int I=0;                //estado inicial
+         int F=S.length-1;       //estado final
+
+         int T=y[0].length;      //numero de frames T
+         double []temT=new double[T];
+
+         for(int t=1;t<=T;t++)
+             temT[t-1]=S[j].GammaLog[t];
+
+         return Util.sumLog(temT);
+
+     }
+
+/****************************************************************/
+
+     //implementacion de ec 9.45 (no usar)
+     //para actualizar Ujm, entra como argumento, los patrones, el estado Sj, y la mixtura m
+/*     public double[] actualizarUjm(Patron patronesE[], int j, int m)
+     {
+         int E=patronesE.length; //numero de patrones de entrenamiento
+         int N=S.length-2;       //numero de estados sin contar estado inicial ni final
+         int I=0;                //estado inicial
+         int F=S.length-1;       //estado final
+
+         int T;      //numero de frames T
+         int D;      //dimension del patron
+         D=patronesE[0].getD();  //dimension del patron
+         double []numerador =new double[D];// los vectores temporales temT* y temE* sirven para acumular los logProb y luego sumarlos
+         double []temEDenominador =new double[E];
+
+         double [][] temE = new double[D][E];
+
+         for(int e=0;e<E;e++)
+         {
+             /*NUMERADOR*/
+/*             T=patronesE[e].getT();  //cada patron tiene tamaño diferente
+
+             //trabajar con las traspuestas
+             //obtener los datos del patron y convertirlo en transpuesta
+             double[][]yTranspuesta=Util.traspuesta(patronesE[e].getDatos());
+             //temporal para trabajar con yTranspuesta
+             //acumulara los valores parciales de la primera parte de la sumatoria
+             double [][]temT=new double[T][D];
+             //termino de la sumatoria t=1:T
+             for(int t=2;t<=T;t++)
+             {
+                 temT[t]=Util.sumar(S[j].gamma_jm_Log[m][t], yTranspuesta[t-1]);
+             }
+
+             //sumar logProb
+             //tomaremos la traspuesta de tempT, para hacer mas facil la suma
+             //y acumularemos los valores parciales en tempE
+             temT=Util.traspuesta(temT);
+             for(int d=0;d<D;d++)
+             {
+                 temE[d][e]=Util.sumLog(temT[d]);
+             }
+             Util.resetear(temT);
+             /*FIN NUMERADOR*/
+
+             /*DENOMINADOR*/
+/*             double []temp=new double[T];
+             for(int t=2;t<=T;t++)
+             {
+                 temp[t]=S[j].gamma_jm_Log[m][t];
+             }
+
+             temEDenominador[e]=Util.sumLog(temp);
+             Util.resetear(temp);
+
+         }
+
+         //cacular el vector correspondiente al denominadorCjm esto se hace
+         // resolviendo el termino de la sumatoria e=1:E
+         //para el numeradorCjm
+         for(int d=0;d<D;d++)
+         {
+             numerador[d]=Util.sumLog(temE[d]);
+         }
+         Util.resetear(temE);
+         //para el denominadorCjm
+         double denominador=Util.sumLog(temEDenominador);
+
+
+         double [] Ujm=new double[D];
+         Ujm=Util.restar(numerador, denominador);
+
+         return Util.exp(Ujm);
+
+     }
+
+     /***************************************************************************************/
+     //implementacion de ec 9.45
+     //para actualizar Ujm, entra como argumento,  el vector de observaciones Y, el estado Sj, y la mixtura m
+     //solo actualiza para la sumatoria t=1:T, no tiene en cuenta e=1:E
+     //solo actualiza el numeradorCjm de la formula
+/*     public double[] numeradorLogUjm(double y[][], int j, int m)
+     {
+         int N=S.length-2;       //numero de estados sin contar estado inicial ni final
+         int I=0;                //estado inicial
+         int F=S.length-1;       //estado final
+         int T=y[0].length;      //numero de frames T
+         int D=y.length;      //dimension del patron
+
+         //trabajar con las traspuestas
+         double[][]yTranspuesta=Util.traspuesta(y);
+         //temporal para trabajar con yTranspuesta
+         //acumulara los valores parciales de la primera parte de la sumatoria
+         double [][]temT=new double[T][D];
+         //termino de la sumatoria t=1:T
+         for(int t=1;t<=T;t++)
+             temT[t-1]=Util.sumar(S[j].gamma_jm_Log[m][t], Util.log(yTranspuesta[t-1]));
+
+         //sumar logProb
+         //tomaremos la traspuesta de tempT, para hacer mas facil la suma
+         double []mediaLogNumerador = new double[D];
+         temT=Util.traspuesta(temT);
+
+         for(int d=0;d<D;d++)
+             mediaLogNumerador[d]=Util.sumLog(temT[d]);
+
+         return mediaLogNumerador;
+
+     }
+     //para el denominadorEjm
+     public double denominadorLogUjm(double [][]y,int j, int m)
+     {
+         int N=S.length-2;       //numero de estados sin contar estado inicial ni final
+         int I=0;                //estado inicial
+         int F=S.length-1;       //estado final
+         int T=y[0].length;      //numero de frames T
+
+         double []temp=new double[T];
+
+         for(int t=1;t<=T;t++)
+             temp[t-1]=S[j].gamma_jm_Log[m][t];
+
+         return Util.sumLog(temp);
+
+     }
+
+     /***************************************************************************************/
+
+
+          /***************************************************************************************/
+     //implementacion de ec 9.46
+     //para actualizar Ujm, entra como argumento,  el vector de observaciones Y, el estado Sj, y la mixtura m
+     //solo actualiza para la sumatoria t=1:T, no tiene en cuenta e=1:E
+     //solo actualiza el numeradorCjm de la formula
+/*     public double[] numeradorLogEjm(double y[][], int j, int m)
+     {
+         int N=S.length-2;       //numero de estados sin contar estado inicial ni final
+         int I=0;                //estado inicial
+         int F=S.length-1;       //estado final
+         int T=y[0].length;      //numero de frames T
+         int D=y.length;      //dimension del patron
+
+         //trabajar con las traspuestas
+         double[][]yTranspuesta=Util.traspuesta(y);
+         //temporal para trabajar con yTranspuesta
+         //acumulara los valores parciales de la primera parte de la sumatoria
+         double [][]temT=new double[T][D];
+         //termino de la sumatoria t=1:T
+         for(int t=1;t<=T;t++)
+         {   //(y-u)
+             yTranspuesta[t-1] =Util.restarAbs(yTranspuesta[t-1], S[j].gmm.N[m].getU());
+             //2*log(y-u)
+             yTranspuesta[t-1]=Util.multiplicar(2, Util.log(yTranspuesta[t-1]));
+              //log(gama)+2*log(y-u)
+             temT[t-1]=Util.sumar(S[j].gamma_jm_Log[m][t], yTranspuesta[t-1]);
+         }
+
+         //sumar logProb
+         //tomaremos la traspuesta de tempT, para hacer mas facil la suma
+         double []covariazaLogNumerador = new double[D];
+         temT=Util.traspuesta(temT);
+
+         for(int d=0;d<D;d++)
+             covariazaLogNumerador[d]=Util.sumLog(temT[d]);
+
+         return covariazaLogNumerador;
+
+     }
+
+     //para el denominadorEjm
+     public double denominadorLogEjm(double [][]y,int j, int m)
+     {
+         int N=S.length-2;       //numero de estados sin contar estado inicial ni final
+         int I=0;                //estado inicial
+         int F=S.length-1;       //estado final
+         int T=y[0].length;      //numero de frames T
+
+         double []temp=new double[T];
+
+         for(int t=1;t<=T;t++)
+             temp[t-1]=S[j].gamma_jm_Log[m][t];
+
+         return Util.sumLog(temp);
+
+
+     }
+
+
+     /***************************************************************************************/
+
+     //implementacion de ec 9.46 (no usar)
+     //para actualizar Ejm, entra como argumento, los patrones, el estado Sj, y la mixtura m
+
+/*     public double[] actualizarEjm(Patron patronesE[], int j, int m)
+     {
+         int E=patronesE.length; //numero de patrones de entrenamiento
+         int N=S.length-2;       //numero de estados sin contar estado inicial ni final
+         int I=0;                //estado inicial
+         int F=S.length-1;       //estado final
+
+         int T;      //numero de frames T
+         int D;      //dimension del patron
+         D=patronesE[0].getD();  //dimension del patron
+         double []numerador =new double[D];// los vectores temporales temT* y temE* sirven para acumular los logProb y luego sumarlos
+         double []temEDenominador =new double[E];
+
+         double [][] temE = new double[D][E];
+
+         for(int e=0;e<E;e++)
+         {
+             /*NUMERADOR*/
+ /*           T=patronesE[e].getT();  //cada patron tiene tamaño diferente
+
+             //trabajar con las traspuestas
+             //obtener los datos del patron y convertirlo en transpuesta
+             double[][]yTranspuesta=Util.traspuesta(patronesE[e].getDatos());
+             //temporal para trabajar con yTranspuesta
+             //acumulara los valores parciales de la primera parte de la sumatoria
+             double [][]temT=new double[T][D];
+             //termino de la sumatoria t=1:T
+             for(int t=2;t<=T;t++)
+             {
+                 //2*log(y_te-u_jm)
+                 yTranspuesta[t-1]=Util.multiplicar(2, Util.restar(yTranspuesta[t-1], S[j].getGmm().N[m].u));
+
+                 temT[t]=Util.sumar(S[j].gamma_jm_Log[m][t], yTranspuesta[t-1]);
+             }
+
+             //sumar logProb
+             //tomaremos la traspuesta de tempT, para hacer mas facil la suma
+             //y acumularemos los valores parciales en tempE
+             temT=Util.traspuesta(temT);
+             for(int d=0;d<D;d++)
+             {
+                 temE[d][e]=Util.sumLog(temT[d]);
+             }
+             /*FIN NUMERADOR*/
+
+             /*DENOMINADOR*/
+   /*          double []temp=new double[T];
+             for(int t=2;t<=T;t++)
+             {
+                 temp[t]=S[j].gamma_jm_Log[m][t];
+             }
+
+             temEDenominador[e]=Util.sumLog(temp);
+
+         }
+
+         //cacular el vector correspondiente al denominadorCjm esto se hace
+         // resolviendo el termino de la sumatoria e=1:E
+         //para el numeradorCjm
+         for(int d=0;d<D;d++)
+         {
+             numerador[d]=Util.sumLog(temE[d]);
+         }
+         //para el denominadorCjm
+         double denominador=Util.sumLog(temEDenominador);
+
+
+         double [] Ejm=new double[D];
+         Ejm=Util.restar(numerador, denominador);
+
+         return Util.exp(Ejm);
+
+     }
+*/
+    
+     public double actualizarAijNumerador(double [][]y,int i, int j)
+     {
+         int N=S.length-2;       //numero de estados sin contar estado inicial ni final
+         int F=S.length-1; //estado final
+         int I=0;          //estado inicial
+         int T=y[0].length;
+         double temp[] =new double[T-1];
+
+         //ecuacion 9.25 parte del numerador
+         if(j==F)
+         {
+             return epsilonLog(i, j, T,y);
+         }
+         //ecuacion 9.26 parte del numerador
+         else if(i==I)
+         {
+             return epsilonLog(i, j, 0,y);
+         }
+         //ecuacion 9.24 parte del numerador
+         else
+         {
+             for(int t=1;t<=(T-1);t++)
+             {
+                 temp[t-1]=epsilonLog(i, j, t,y);
+             }
+             double result=Util.sumLog(temp);
+             System.out.println("\n result "+result);
+             System.out.println("");
+             return result;
+         }
+     }
+
+     public double actualizarAijDenominador(double [][]y,int i, int j)
+     {
+         int N=S.length-2;       //numero de estados sin contar estado inicial ni final
+         int F=S.length-1; //estado final
+         int I=0;          //estado inicial
+         int T=y[0].length;
+         double temp[] =new double[T];
+
+         //ecuacion 9.25 parte del denominador
+         if(j==F)
+         {
+             for(int t=1;t<=T;t++)
+             {
+                 temp[t-1]=S[i].GammaLog[t];
+             }
+             return Util.sumLog(temp);
+         }
+         //ecuacion 9.26 parte del denominador
+         else if(i==I)
+         {
+             System.out.println("result 1");
+             return 1;
+         }
+         //ecuacion 9.24 parte del denominador
+         else
+         {
+             for(int t=1;t<=T;t++)
+             {
+                 temp[t-1]=S[i].GammaLog[t];
+             }
+             return Util.sumLog(temp);
+         }
+     }
+
+
+     public void verificar()
+     {
+         int N=S.length-2;
+         int T=S[1].alfaLog.length-2;
+         double []temp = new double[N];
+         double []suma=new double [T];
+         int cont;
+
+         System.out.println("verifica que la suma de S[i].alfaLog[t]+S[i].betaLog[t]  en cada instante de tiempo sea la misma");
+         for(int t=1;t<=T;t++){
+             cont=0;
+             for(int i=1;i<=N;i++){
+                 if(S[i].alfaLog[t]!=0&&S[i].betaLog[t]!=0)
+                 {
+                     temp[cont]=S[i].alfaLog[t]+S[i].betaLog[t];
+                     cont++;
+                 }
+             }
+             suma[t-1]=Util.sumLog(temp);
+             System.out.println(" suma "+suma[t-1]);
+             Util.resetear(temp);
+         }
+
+         System.out.println("verifica que la suma de gammalog_{jm} por estado sea igual gammalog(j) es decir log(gamalog_{11}+...+log(gamalog_{1M)=log(gammalog(1))");
+         System.out.println("ver funciones getGammaLog y getGamma_jm");
+
+         for(int t=1;t<=T;t++)
+         {
+             for(int i=1;i<=N;i++)
+             {
+                 double[][] transpuesta=Util.traspuesta(S[i].gamma_jm_Log);
+                 System.out.println(" gamma_jm_Log"+Util.sumLog(transpuesta[t]));
+                 System.out.println("gammaLog"+S[i].GammaLog[t]);
+
+             }
+             System.out.println("");
+         }
+
+
+
+
+     }
+
+/******************************************************************************************************************/
+Metodos ya implementados en la nueva versión
+/******************************************************************************************************************/
+
+
+    public void algoritmoViterbi(double [][]y)
+    {
+        int N=S.length-2;       //numero de estados sin contar estado inicial ni final
+        int T=y[0].length;      //numero de frames T
+        int I=0;                //estado inicial
+        int F=S.length-1;       //estado final
+
+        //trabajar con las traspuestas
+        double[][]yTranspuesta=Util.traspuesta(y);
+
+        /*INICIALIZACION*/
+        //se inicializa T=1
+        //tener en cuenta yTranspuesta[0] es Y en el tiempo t=1
+ /*       for(int i=1;i<=N;i++)
+        {
+            //inicializa el vector alfa, tener en cuenta que alfa[0] no existe y alfa[T]es alfaF(T)
+            S[i].setAlfaViterbiLog(T+2);
+            //log (alfa_i(1)) =log(A[I=0][j])             +        log (b_i(Y_1))  ec 9.8
+            if(grafoHMM[I][i]==1)//si existe una conexion del estado I al estado i
+                S[i].alfaViterbiLog[1]   =Util.log(A[I][i])+ S[i].b(yTranspuesta[0]);
+
+        }
+
+        /*INDUCCION*/
+        //para t=2 hasta t=T
+        //ec 9.7
+        //alfa_j(t)=sum_{i=1...N}(alfa _i(t-1)Aij)b_j(y_t)
+        //log( alfa_j(t) ) = log( sum_{i=1...N}(alfa _i(t-1)Aij) ) + log( b_j(y_t) )
+
+ /*       double []temp=new double[N];//acumulador
+        int cont; //cont para temp
+
+
+        for(int t=2;t<=T;t++)
+        {
+            for(int j=1;j<=N;j++)
+            {
+                cont=0;
+                for(int i=1;i<=N;i++)
+                {   //     =log( alfa _i(t-1) ) + log (Aij) donde  S[i].alfaLog[t-1]=log( alfa _i(t-1) )
+                    if(grafoHMM[i][j]==1) //si existe una conexion del estado i al estado j
+                    {
+                        if(S[i].alfaViterbiLog[t-1]!=0) //para evitar que un estado en un tiempo t que previamente no tiene valor en el tiempo t-1 se llene con valores erroneos
+                        {
+                            temp[cont]=S[i].alfaViterbiLog[t-1]+Util.log(A[i][j]);
+                            cont++;
+                        }
+                    }
+                }
+              //log( alfa_j(t) ) = log( sum_{i=1...N}(alfa _i(t-1)Aij) ) + log( b_j(y_t) )
+
+                if(Util.sumLog(temp)!=0)
+                {
+                    temp=Util.eliminarCeros(temp);
+                    S[j].alfaViterbiLog[t]  = Util.max(temp)    +   S[j].b(yTranspuesta[t-1]);
+                    if(Math.exp(S[j].alfaViterbiLog[t])>1)
+                        System.out.println("error en los alfas viterbi");
+                    //System.out.println(" probabilidad"+Math.exp(S[j].alfaLog[t]));
+                    temp=new double[N];//acumulador
+                }
+                temp=Util.resetear(temp);
+
+            }
+        }
+        //TERMINACION
+        //alfa_F(T)  ecu 9.9
+        cont=0;
+        for(int i=1;i<=N;i++)
+        {
+            if(grafoHMM[i][F]==1)// si existe una conexion del estado i al estado F
+            {
+                temp[cont]=S[i].alfaViterbiLog[T]+Util.log(A[i][F]);
+                cont++;
+            }
+        }
+        S[S.length-1].setAlfaViterbiLog(T+2);
+        temp=Util.eliminarCeros(temp);
+        S[S.length-1].alfaViterbiLog[T+1]=Util.max(temp);
+    }
+
+
+  </body>
+</html>
